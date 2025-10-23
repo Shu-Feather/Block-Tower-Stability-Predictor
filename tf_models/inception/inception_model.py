@@ -62,7 +62,6 @@ def inception_v4_model_fn(features, labels, mode, params):
 
   # construct graph
   # TODO: call inception_v4 with features and num_classes
-  logits, endpoints = None, None
 
   is_training = (mode == tf.estimator.ModeKeys.TRAIN)
   logits, endpoints = inception_v4(
@@ -162,6 +161,9 @@ def inception_v4_logregr_model_fn(features, labels, mode, params):
       features, 
       num_classes=2,  # Binary classification: stable vs unstable
       is_training=is_training)
+  
+  # adding names to logits
+  logits = tf.identity(logits, name='logits')
 
   # predictions to make
   # TODO: your code here

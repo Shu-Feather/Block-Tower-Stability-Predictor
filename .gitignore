@@ -1,4 +1,5 @@
-# 通用 .gitignore 文件
+## 项目相关
+output*/
 
 ## 操作系统文件
 .DS_Store

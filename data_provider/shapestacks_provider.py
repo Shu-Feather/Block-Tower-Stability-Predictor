@@ -54,13 +54,41 @@ def _get_filenames_with_labels(mode, data_dir, split_dir):
     scenario_dir = os.path.join(data_dir, 'recordings', scenario)
     
     # TODO: assign label (0 = stable, 1 = unstable)
-    label = None
-    # The scenario name contains 'unstable' if it's unstable, otherwise it's stable
-    if 'unstable' in scenario:
-      label = 1
-    else:
-      label = 0
 
+    # Check if directory exists
+    if not os.path.exists(scenario_dir):
+      print(f"Warning: Directory does not exist: {scenario_dir}")
+      continue
+
+    # Read from log.txt file which contains "Stack collapse: True/False"
+    log_file = os.path.join(scenario_dir, 'log.txt')
+
+    if os.path.exists(log_file):
+      with open(log_file, 'r') as f:
+        log_content = f.read()
+        # Look for "Stack collapse: True" or "Stack collapse: False"
+        if 'Stack collapse: True' in log_content:
+          label = 1  # unstable
+        elif 'Stack collapse: False' in log_content:
+          label = 0  # stable 
+    
+    # Fallback: try depth_log.txt if log.txt doesn't have the info
+    if label is None:
+      depth_log_file = os.path.join(scenario_dir, 'depth_log.txt')
+      if os.path.exists(depth_log_file):
+        with open(depth_log_file, 'r') as f:
+          log_content = f.read()
+          if 'Stack collapse: True' in log_content:
+            label = 1  # unstable
+          elif 'Stack collapse: False' in log_content:
+            label = 0  # stable
+    
+    # If still no label found, raise an error
+    if label is None:
+      print(f"Could not determine stability label for scenario: {scenario}, use unstable as default.")
+      label = 1
+
+    # Find all RGB images matching the pattern
     for img_file in filter(
         lambda f: f.startswith('rgb-') and f.endswith('-mono-0.png'),
         os.listdir(scenario_dir)):
@@ -72,7 +100,6 @@ def _get_filenames_with_labels(mode, data_dir, split_dir):
 def _create_dataset(filenames, labels):
   # TODO: Creates a dataset from the given filename and label tensors.
   # Hint: use tf.constant and Dataset.from_tensor_slices
-  dataset = None
 
   # Convert lists to tensors
   filenames_tensor = tf.constant(filenames)
@@ -100,8 +127,6 @@ def _parse_record(filename, label):
       image_decoded, _HEIGHT, _WIDTH)
   
   # TODO: cast to float32 and reshape
-  image_float = None
-  label = None
 
   image_float = tf.cast(image_resized, tf.float32)
   image_float = image_float / 255.0
@@ -109,8 +134,8 @@ def _parse_record(filename, label):
   # Reshape to ensure correct dimensions
   image_float = tf.reshape(image_float, [_HEIGHT, _WIDTH, _CHANNELS])
   
-  # Cast label to int32
-  label = tf.cast(label, tf.int32)
+  # # Cast label to int32
+  # label = tf.cast(label, tf.int32)
 
   return image_float, label
 
