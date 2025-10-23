@@ -1,0 +1,99 @@
+# 通用 .gitignore 文件
+
+## 操作系统文件
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+## 编辑器/IDE
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# IntelliJ
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Sublime Text
+*.sublime-*
+sublime-*
+
+# Vim
+*.swp
+*.swo
+*~
+
+## 语言相关
+
+### Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+
+## 日志文件
+*.log
+logs/
+
+## 环境变量文件
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+## 临时文件
+*.tmp
+*.temp
+*.bak
+*.backup
+
+## 测试相关
+coverage/
+.nyc_output/
+
+## 文档
+*.pdf
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+
+## 压缩文件
+*.zip
+*.tar.gz
+*.rar
+
+## 其他
+.cache/
+.parcel-cache/
+.nyc_output/
+
+# 保留空目录的占位文件
+!.gitkeep
