@@ -10,7 +10,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+
 from .inception_v4 import inception_v4
 
 
@@ -27,9 +29,12 @@ _NUM_CLASSES = 1000
 
 # learning deafults
 # TODO: you can change or add any hyperparameters as you need
-_START_LEARNING_RATE = 1.0
-_DECAY = 1.0
+_START_LEARNING_RATE = 0.045
+_DECAY = 0.9
 _EPSILON = 1.0
+_LR_DECAY = 0.94
+_LR_DECAY_RATE = 2 # decay ever n epochs
+_MOMENTUM = 0.9
 
 
 def inception_v4_model_fn(features, labels, mode, params):
@@ -68,12 +73,16 @@ def inception_v4_model_fn(features, labels, mode, params):
       features, 
       num_classes=num_classes,
       is_training=is_training)
+  
+  # adding names to logits
+  for _, endpoint in endpoints.items():
+    tf.add_to_collection('inception_v4_endpoints', endpoint)
 
   # TODO: predictions to make
   predictions = {
-      'classes': tf.argmax(logits, axis=1),  # Predicted class
-      'softmax': tf.nn.softmax(logits, name='softmax'),  # Class probabilities
-      'logits': logits  # Raw logits
+      'classes' : tf.argmax(logits, axis=1, name='classes'),
+      'softmax' : tf.nn.softmax(logits, name='softmax'),
+      'logits' : tf.identity(logits, name='logits')
   }
 
   # loss function to optimize
@@ -93,23 +102,13 @@ def inception_v4_model_fn(features, labels, mode, params):
     # TODO: evaluation metrics to monitor
     eval_metric_ops = {
         'accuracy': tf.metrics.accuracy(
-            labels=labels,
+            labels=tf.argmax(onehot_labels, axis=1),
             predictions=predictions['classes'])
     }
-
-    return tf.estimator.EstimatorSpec(
-        mode=mode,
-        loss=loss,
-        eval_metric_ops=eval_metric_ops)
 
   # TODO: return EstimatorSpec depending on mode
   # Hint: three mode: train, eval and prediction
   # Hint: if in training mode, minimize loss with RMSProp optimizer
-
-  if mode == tf.estimator.ModeKeys.PREDICT:
-    return tf.estimator.EstimatorSpec(
-        mode=mode,
-        predictions=predictions)
 
   # Training mode
   if mode == tf.estimator.ModeKeys.TRAIN:
@@ -128,6 +127,19 @@ def inception_v4_model_fn(features, labels, mode, params):
         mode=mode,
         loss=loss,
         train_op=train_op)
+  
+  # Evaluation mode
+  if mode == tf.estimator.ModeKeys.EVAL:
+    return tf.estimator.EstimatorSpec(
+        mode=mode,
+        loss=loss,
+        eval_metric_ops=eval_metric_ops)
+  
+  # Prediction mode
+  if mode == tf.estimator.ModeKeys.PREDICT:
+    return tf.estimator.EstimatorSpec(
+        mode=mode,
+        predictions=predictions)
 
 def inception_v4_logregr_model_fn(features, labels, mode, params):
   """
@@ -144,6 +156,7 @@ def inception_v4_logregr_model_fn(features, labels, mode, params):
       num_display_images
   """
   # parameter parsing or defaults
+  num_classes = 1  # binary classification
   num_display_images = (
       _NUM_DISPLAY_IMAGES if not 'num_display_images' in params
       else params['num_display_images'])
@@ -158,22 +171,23 @@ def inception_v4_logregr_model_fn(features, labels, mode, params):
   # TODO: call inception_v4 with features and num_classes
   is_training = (mode == tf.estimator.ModeKeys.TRAIN)
   logits, endpoints = inception_v4(
-      features, 
-      num_classes=2,  # Binary classification: stable vs unstable
+      inputs=features,
+      num_classes=num_classes,
       is_training=is_training)
-  
-  # adding names to logits
-  logits = tf.identity(logits, name='logits')
+
+  for _, endpoint in endpoints.items():
+    tf.add_to_collection('inception_v4_endpoints', endpoint)
 
   # predictions to make
   # TODO: your code here
-  # For binary classification, we use softmax over 2 classes
-  probs = tf.nn.softmax(logits)
   
+  # Apply sigmoid to logits for binary classification
+  log_regr = tf.nn.sigmoid(logits, name='sigmoid')
+
   predictions = {
-      'classes': tf.argmax(logits, axis=1),  # Predicted class (0 or 1)
-      'probabilities': probs,  # Probability distribution over classes
-      'logits': logits  # Raw logits
+      'classes' : tf.round(log_regr, name='classes'),
+      'probabilities' : log_regr,
+      'logits' : tf.identity(logits, name='logits')
   }
 
   # loss function to optimize
@@ -181,12 +195,8 @@ def inception_v4_logregr_model_fn(features, labels, mode, params):
     # TODO: your code here
     # Hint: This model_fn is for binary task.
 
-    # Binary cross-entropy loss using softmax
-    # Convert labels to one-hot encoding
-    onehot_labels = tf.one_hot(indices=tf.cast(labels, tf.int32), depth=2)
-    loss = tf.losses.softmax_cross_entropy(
-        onehot_labels=onehot_labels,
-        logits=logits)
+    loss = tf.losses.sigmoid_cross_entropy(
+        multi_class_labels=tf.reshape(tf.cast(labels, tf.int32), [-1, 1]), logits=logits)
     
     # Add loss to tensorboard
     tf.summary.scalar('loss', loss)
@@ -195,25 +205,15 @@ def inception_v4_logregr_model_fn(features, labels, mode, params):
     # evaluation metrics to monitor
     eval_metric_ops = {
         'accuracy': tf.metrics.accuracy(
-            labels=labels,
+            labels=tf.reshape(tf.cast(labels, tf.int32), [-1, 1]),
             predictions=predictions['classes'])
     }
-    
-    return tf.estimator.EstimatorSpec(
-        mode=mode,
-        loss=loss,
-        eval_metric_ops=eval_metric_ops)
 
   # TODO: return EstimatorSpec depending on mode
   # Hint: three mode: train, eval and prediction
   # Hint: if in training mode, minimize loss with RMSProp optimizer
   
   # Return EstimatorSpec depending on mode
-  if mode == tf.estimator.ModeKeys.PREDICT:
-    return tf.estimator.EstimatorSpec(
-        mode=mode,
-        predictions=predictions)
-
   # Training mode
   if mode == tf.estimator.ModeKeys.TRAIN:
     # Create RMSProp optimizer
@@ -231,3 +231,16 @@ def inception_v4_logregr_model_fn(features, labels, mode, params):
         mode=mode,
         loss=loss,
         train_op=train_op)
+  
+  # Evaluation mode
+  if mode == tf.estimator.ModeKeys.EVAL:
+    return tf.estimator.EstimatorSpec(
+        mode=mode,
+        loss=loss,
+        eval_metric_ops=eval_metric_ops)
+  
+  # Prediction mode
+  if mode == tf.estimator.ModeKeys.PREDICT:
+    return tf.estimator.EstimatorSpec(
+        mode=mode,
+        predictions=predictions)

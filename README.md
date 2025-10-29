@@ -1,8 +1,10 @@
-# Lab 3: Block Tower Stability Predictor
+# Block Tower Stability Predictor
 
 ## 📋 Project Overview
 
 This project implements an InceptionV4-based deep learning model for predicting the stability of block towers. Using the ShapeStacks dataset, the model performs binary classification to determine whether a block tower will collapse (stable vs. unstable).
+
+The project is herited from [original codes](https://github.com/ogroth/shapestacks), and is **adapted for [tensorflow 2+](https://www.tensorflow.org/guide)**.
 
 ### Background
 
@@ -21,7 +23,7 @@ Predicting structural stability is a critical challenge in architecture, robotic
 ## 🗂️ Project Structure
 
 ```
-lab3/
+Stability-Predictor/
 ├── data_provider/
 │   └── shapestacks_provider.py      # Data loading and preprocessing
 ├── tf_models/
@@ -32,7 +34,7 @@ lab3/
 │   └── stability_predictor/
 │       ├── train_inception_v4_shapestacks.py   # Training script
 │       └── test_inception_v4_shapestacks.py    # Testing script
-├── lab3_dataset/                    # This should be downloaded mannually
+├── dataset/                         # This should be downloaded mannually
 │   └── shapestacks/                 # Dataset directory
 │       ├── recordings/              # Image data
 │       ├── splits/                  # Train/eval/test splits
@@ -55,22 +57,24 @@ lab3/
 
 ### Prerequisites
 
-- Python 3.6+
-- CUDA 10.0+ (for GPU support)
-- cuDNN 7.0+
+- Python 3.8+
+- CUDA 11.0+ (for GPU support)
+- cuDNN 8.0+
+- tensorflow 2.0.0+
 
 ### Environment Setup
 
+Following is performed on Nvidia A100, 80G.
+
 ```bash
-# Create conda environment
-conda create -n stability_predictor python=3.6
+# Create conda environment compatible with A100
+conda create -n stability_predictor python=3.8
 conda activate stability_predictor
 
-conda install cudatoolkit=10.0
-conda install cudnn==7.6.5
+conda install -c conda-forge cudatoolkit=11.2 cudnn=8.1 -y
 
 # Install TensorFlow (GPU version)
-pip install tensorflow-gpu==1.15.0
+pip install tensorflow==2.8.0
 
 # Install other dependencies
 pip install numpy matplotlib Pillow
@@ -82,7 +86,7 @@ pip install numpy matplotlib Pillow
 
 ### Download
 
-Download the ShapeStacks dataset from the provided link and extract it to `lab3_dataset/shapestacks/`.
+Download the ShapeStacks dataset from the [provided link](https://ogroth.github.io/shapestacks/) and extract it to `lab3_dataset/shapestacks/`.
 
 ### Dataset Structure
 
@@ -111,6 +115,8 @@ shapestacks/
 
 ## 🚀 Quick Start
 
+Following is how to train and test this model quickly. You can view detailed command-line instructions in `run.sh`.
+
 ### 1. Set Environment Variable
 
 ```bash
@@ -120,31 +126,48 @@ export SHAPESTACKS_CODE_HOME=./
 ### 2. Training
 
 ```bash
-# Basic training (recommended settings)
+# Basic training
 export CUDA_VISIBLE_DEVICES=0  # Use single GPU, you can modify it
 
+# use ccs_all split data
 python intuitive_physics/stability_predictor/train_inception_v4_shapestacks.py \
   --data_dir /path/to/lab3_dataset/shapestacks \
   --model_dir ./output_ccs_all \
   --split_name ccs_all \
   --train_epochs 40 \
-  --batch_size 16 \
-  --memcap 0.6
+  --batch_size 32
 
-# Run in background with logging
+# use blocks_all split data
+python intuitive_physics/stability_predictor/train_inception_v4_shapestacks.py \
+  --data_dir /path/to/lab3_dataset/shapestacks \
+  --model_dir ./output_blocks_all \
+  --split_name blocks_all \
+  --train_epochs 40 \
+  --batch_size 32
+
+# or choose to run in background with logging
 nohup python intuitive_physics/stability_predictor/train_inception_v4_shapestacks.py \
   --data_dir /path/to/lab3_dataset/shapestacks \
   --model_dir ./output_ccs_all \
   --split_name ccs_all \
   --train_epochs 40 \
-  --batch_size 16 > train.log 2>&1 &
+  --batch_size 32 > train_ccs.log 2>&1 &
+
+nohup python intuitive_physics/stability_predictor/train_inception_v4_shapestacks.py \
+  --data_dir /data1/shuyang/lab3_dataset/shapestacks \
+  --model_dir ./output_blocks_all \
+  --split_name blocks_all \
+  --train_epochs 40 \
+  --batch_size 32 > train_blocks.log 2>&1 &
 ```
 
 ### 3. Monitor Training
 
 ```bash
 # Monitor log file
-tail -f train.log
+tail -f train_ccs.log
+
+tail -f train_blocks.log
 
 # Monitor GPU usage
 watch -n 1 nvidia-smi
@@ -161,6 +184,12 @@ python intuitive_physics/stability_predictor/test_inception_v4_shapestacks.py \
   --data_dir /path/to/lab3_dataset/shapestacks \
   --model_dir ./output_ccs_all \
   --split_name ccs_all \
+  --batch_size 32
+
+python intuitive_physics/stability_predictor/test_inception_v4_shapestacks.py \
+  --data_dir /data1/shuyang/lab3_dataset/shapestacks \
+  --model_dir ./output_blocks_all \
+  --split_name blocks_all \
   --batch_size 32
 ```
 
@@ -220,24 +249,6 @@ Top-5 models so far:
   Accuracy: 0.652341 - eval=0.652341
 ```
 
-### Performance Metrics
-
-| Metric | Expected Value |
-|--------|---------------|
-| Training Accuracy | > 85% |
-| Validation Accuracy | > 80% |
-| Test Accuracy | > 75% |
-| Training Time (40 epochs) | ~6-12 hours (on A100) |
-
-### GPU Memory Usage
-
-| Batch Size | GPU Memory | A100 80GB Status |
-|------------|------------|------------------|
-| 32 | ~40-50 GB | ⚠️ May OOM |
-| 16 | ~25-30 GB | ✅ Recommended |
-| 8 | ~15-20 GB | ✅ Safe |
-| 4 | ~10-15 GB | ✅ Very Safe |
-
 ---
 
 ## 📈 Monitoring and Visualization
@@ -293,17 +304,6 @@ optimizer = tf.train.RMSPropOptimizer(
 
 # Log learning rate
 tf.summary.scalar('learning_rate', learning_rate)
-```
-
-### Multi-GPU Training
-
-```bash
-# Use multiple GPUs (experimental)
-export CUDA_VISIBLE_DEVICES=0,1,2,3
-
-python train_inception_v4_shapestacks.py \
-  --batch_size 64 \
-  ...
 ```
 
 ### Resume Training

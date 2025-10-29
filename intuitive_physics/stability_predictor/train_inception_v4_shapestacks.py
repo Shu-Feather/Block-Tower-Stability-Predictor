@@ -14,7 +14,8 @@ import argparse
 import pickle
 import subprocess
 import time
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 
 sys.path.insert(0, os.environ['SHAPESTACKS_CODE_HOME'])
 from tf_models.inception.inception_model import inception_v4_logregr_model_fn, inception_v4_model_fn
@@ -135,7 +136,7 @@ def main(unparsed_argv):
             n_prefetch=int(FLAGS.n_prefetch),
             augment=FLAGS.augment
         ),
-        hooks=[logging_hook]
+        hooks=[logging_hook],
     )
 
     # TODO: evaluate the model on the corresponding eval set with mode eval
@@ -146,10 +147,11 @@ def main(unparsed_argv):
             data_dir=FLAGS.data_dir,
             split_name=FLAGS.split_name,
             batch_size=FLAGS.batch_size,
-            num_epochs=1,
+            num_epochs=FLAGS.epochs_per_eval,
             n_prefetch=int(FLAGS.n_prefetch),
-            augment=[]  # No augmentation during evaluation
-        )
+            augment=FLAGS.augment
+        ),
+        name='eval',
     )
 
     # Print evaluation results

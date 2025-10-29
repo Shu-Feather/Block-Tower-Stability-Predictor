@@ -24,9 +24,11 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 
-slim = tf.contrib.slim
+# slim = tf.contrib.slim
+import tf_slim as slim
 
 
 def inception_arg_scope(weight_decay=0.00004,

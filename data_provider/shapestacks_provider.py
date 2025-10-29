@@ -55,38 +55,10 @@ def _get_filenames_with_labels(mode, data_dir, split_dir):
     
     # TODO: assign label (0 = stable, 1 = unstable)
 
-    # Check if directory exists
-    if not os.path.exists(scenario_dir):
-      print(f"Warning: Directory does not exist: {scenario_dir}")
-      continue
-
-    # Read from log.txt file which contains "Stack collapse: True/False"
-    log_file = os.path.join(scenario_dir, 'log.txt')
-
-    if os.path.exists(log_file):
-      with open(log_file, 'r') as f:
-        log_content = f.read()
-        # Look for "Stack collapse: True" or "Stack collapse: False"
-        if 'Stack collapse: True' in log_content:
-          label = 1  # unstable
-        elif 'Stack collapse: False' in log_content:
-          label = 0  # stable 
-    
-    # Fallback: try depth_log.txt if log.txt doesn't have the info
-    if label is None:
-      depth_log_file = os.path.join(scenario_dir, 'depth_log.txt')
-      if os.path.exists(depth_log_file):
-        with open(depth_log_file, 'r') as f:
-          log_content = f.read()
-          if 'Stack collapse: True' in log_content:
-            label = 1  # unstable
-          elif 'Stack collapse: False' in log_content:
-            label = 0  # stable
-    
-    # If still no label found, raise an error
-    if label is None:
-      print(f"Could not determine stability label for scenario: {scenario}, use unstable as default.")
-      label = 1
+    if "vcom=0" in scenario and "vpsf=0" in scenario: # stable scenario
+      label = 0.0
+    else: # unstable scenario
+      label = 1.0
 
     # Find all RGB images matching the pattern
     for img_file in filter(
@@ -114,22 +86,25 @@ def _parse_record(filename, label):
   Reads the file and returns a (feature, label) pair.
   Image feature values are returned to scale in [0.0, 1.0].
   """
-  # TODO: read file with tf.read_file
-  image_string = tf.read_file(filename)
+  # TODO: read file with tf.io.read_file
+  # image_string = tf.read_file(filename)
+  image_string = tf.io.read_file(filename)
 
   # TODO: decode image with tf.image.decode_image
+  # image_decoded = tf.image.decode_png(image_string, channels=_CHANNELS)
   image_decoded = tf.image.decode_png(image_string, channels=_CHANNELS)
   
   # TODO: resize/crop/pad to (_HEIGHT, _WIDTH)
   # decode_png returns a tensor with shape [height, width, channels]
   # We need to ensure it's the right size
-  image_resized = tf.image.resize_image_with_crop_or_pad(
+  # image_resized = tf.image.resize_image_with_crop_or_pad(
+  #     image_decoded, _HEIGHT, _WIDTH)
+  image_resized = tf.image.resize_with_crop_or_pad(
       image_decoded, _HEIGHT, _WIDTH)
   
   # TODO: cast to float32 and reshape
 
   image_float = tf.cast(image_resized, tf.float32)
-  image_float = image_float / 255.0
   
   # Reshape to ensure correct dimensions
   image_float = tf.reshape(image_float, [_HEIGHT, _WIDTH, _CHANNELS])
@@ -154,10 +129,15 @@ def _augment(feature, label, augment):
 
   if 'rotate' in augment:
     random_rotation = tf.reshape(
-        tf.random_uniform([1], minval=-0.01, maxval=0.01, dtype=tf.float32),
+        # tf.random_uniform([1], minval=-0.01, maxval=0.01, dtype=tf.float32),
+        tf.random.uniform([1], minval=-0.01, maxval=0.01, dtype=tf.float32),
         [])
-    feature = tf.contrib.image.rotate(
+    
+    import tensorflow_addons as tfa
+    feature = tfa.image.rotate(
         feature, random_rotation * 3.1415, interpolation='BILINEAR')
+    # feature = tf.contrib.image.rotate(
+    #     feature, random_rotation * 3.1415, interpolation='BILINEAR')
 
   if 'convert' in augment:
     feature = tf.multiply(feature, 1.0 / 255.0)
@@ -167,23 +147,35 @@ def _augment(feature, label, augment):
 
     if 'stretch' in augment:
       rand_crop_height = tf.reshape(
-          tf.random_uniform(
+          # tf.random_uniform(
+          #     [1], minval=_CROP_HEIGHT, maxval=_HEIGHT, dtype=tf.int32),
+          # [])
+          tf.random.uniform(
               [1], minval=_CROP_HEIGHT, maxval=_HEIGHT, dtype=tf.int32),
           [])
       rand_crop_width = tf.reshape(
-          tf.random_uniform(
+          # tf.random_uniform(
+          #     [1], minval=_CROP_WIDTH, maxval=_WIDTH, dtype=tf.int32),
+          # [])
+          tf.random.uniform(
               [1], minval=_CROP_WIDTH, maxval=_WIDTH, dtype=tf.int32),
           [])
     else:
       rand_crop_height = _CROP_HEIGHT
       rand_crop_width = _CROP_WIDTH
 
-    feature = tf.random_crop(
+    # feature = tf.random_crop(
+    #     value=feature, size=[rand_crop_height, rand_crop_width, _CHANNELS])
+    feature = tf.image.random_crop(
         value=feature, size=[rand_crop_height, rand_crop_width, _CHANNELS])
-    feature = tf.image.resize_bilinear(
-        images=tf.reshape(
-            feature, [1, rand_crop_height, rand_crop_width, _CHANNELS]),
-        size=[_HEIGHT, _WIDTH])
+    # feature = tf.image.resize_bilinear(
+    #     images=tf.reshape(
+    #         feature, [1, rand_crop_height, rand_crop_width, _CHANNELS]),
+    #     size=[_HEIGHT, _WIDTH])
+    feature = tf.image.resize(
+        images=tf.reshape(feature, [1, rand_crop_height, rand_crop_width, _CHANNELS]),
+        size=[_HEIGHT, _WIDTH],
+        method='bilinear')
 
   if 'flip' in augment:
     feature = tf.image.random_flip_left_right(
@@ -197,7 +189,9 @@ def _augment(feature, label, augment):
 
   if 'noise' in augment:
     # add gaussian noise
-    gaussian_noise = tf.random_normal(
+    # gaussian_noise = tf.random_normal(
+    #     [_HEIGHT, _WIDTH, _CHANNELS], stddev=4. / convert_factor)
+    gaussian_noise = tf.random.normal(
         [_HEIGHT, _WIDTH, _CHANNELS], stddev=4. / convert_factor)
     feature = tf.add(feature, gaussian_noise)
 
@@ -266,24 +260,24 @@ def shapestacks_input_fn(
   # TODO: parse data from files and apply pre-processing
   # Hint: consider two conditions: the training mode with augment
   # Map the parsing function to each element
-  dataset = dataset.map(_parse_record, num_parallel_calls=4)
+  dataset = dataset.map(_parse_record)
   
   # Apply augmentation if specified
-  if len(augment) > 0:
+  if augment != [] and mode == 'train':
     dataset = dataset.map(
         lambda feature, label: _augment(feature, label, augment),
-        num_parallel_calls=4)
+        )
   
   # Apply mean subtraction if specified
   if 'subtract_mean' in augment:
     dataset = dataset.map(
         lambda feature, label: _center_data(feature, label, rgb_mean_npy),
-        num_parallel_calls=4)
+        )
 
   # TODO: prepare batch and epoch cycle
   # Hint: use prefetch, repeat and batch on dataset
   # Prefetch data for better performance
-  dataset = dataset.prefetch(buffer_size=n_prefetch)
+  dataset = dataset.prefetch(n_prefetch * batch_size)
   
   # Repeat for multiple epochs
   dataset = dataset.repeat(num_epochs)
@@ -292,6 +286,7 @@ def shapestacks_input_fn(
   dataset = dataset.batch(batch_size)
   
   # set up iterator
-  iterator = dataset.make_one_shot_iterator()
+  # iterator = dataset.make_one_shot_iterator()
+  iterator = tf.compat.v1.data.make_one_shot_iterator(dataset)
   images, labels = iterator.get_next()
   return images, labels
